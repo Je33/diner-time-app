@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
-const base = "https://dinner-time-test.fly.dev/recipe/read?search_ingredients="
+const base = "http://localhost:3000/recipe/read?"
+const qParams = new URLSearchParams(location.search.slice(1))
+let timeOutId: number
 
 type Recipe = {
     id: number
@@ -23,12 +25,12 @@ const Card = (props: { recipe: Recipe }) => {
 
     return <div
         className="max-w-sm bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
-        <a href="#">
+        <div>
             <img className="rounded-t-lg object-cover h-48 w-96" src={ recipe.image } alt={ recipe.title } />
-        </a>
+        </div>
         <div className="p-5">
             <p className="mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white">{ recipe.title }</p>
-            {recipe.ingredients.map((ingredient: string) => (<p className="mb-1 text-sm font-normal text-gray-700 dark:text-gray-400">{ ingredient }</p>))}
+            {recipe.ingredients.map((ingredient: string) => (<p key={ingredient} className="mb-1 text-sm font-normal text-gray-700 dark:text-gray-400">{ ingredient }</p>))}
         </div>
     </div>
 }
@@ -36,11 +38,14 @@ const Card = (props: { recipe: Recipe }) => {
 export default function App() {
 
     const [recipes, setRecipes] = useState([])
-    const [query, setQuery] = useState("");
-    const [loading, setLoading] = useState(false);
+    const [query, setQuery] = useState(qParams.get("search_ingredients") || "")
+    const [page, setPage] = useState(qParams.get("page") && Number(qParams.get("page")) > 0 ? Number(qParams.get("page")) : 1)
+    const [loading, setLoading] = useState(false)
 
+    qParams.set("per_page", "20")
     const fetchData = async (url: string) => {
         setLoading(true)
+        history.pushState("", "", location.origin + "?" + qParams.toString())
         try {
             const response = await fetch(url)
             const json = await response.json()
@@ -48,20 +53,30 @@ export default function App() {
             setRecipes(json)
             setLoading(false)
         } catch (error) {
-            console.log("error", error)
+            console.error("error", error)
             setLoading(false)
         }
     }
 
-    useEffect(() => {
-        const timeOutId = setTimeout(() => fetchData(base + query), 500);
-        return () => clearTimeout(timeOutId);
-    }, [query]);
+    const debouncedSearch = (query: string) => {
+        setQuery(query)
+        clearTimeout(timeOutId)
+        timeOutId = setTimeout(() => {
+            setPage(1)
+            qParams.set("page", "1")
+            qParams.set("search_ingredients", query)
+            fetchData(base + qParams.toString())
+        }, 800)
+    }
+
+    const onPageChange = (page: number) => {
+        setPage(page)
+        qParams.set("page", page.toString())
+        fetchData(base + qParams.toString())
+    }
 
     useEffect(() => {
-        const url = base + query
-
-        fetchData(url)
+        fetchData(base + qParams.toString())
     }, [])
 
     return (
@@ -73,14 +88,15 @@ export default function App() {
                     <div className="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
                         <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true"
                              xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                                   d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
                         </svg>
                     </div>
                     <input type="search" id="default-search"
                            className="block outline-none w-full p-4 ps-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                           placeholder="Search by ingredients" required value={query}
-                           onChange={event => setQuery(event.target.value)}/>
+                           placeholder="Search by ingredients" required
+                           value={query}
+                           onChange={event => debouncedSearch(event.target.value)}/>
                     <div role="status" className="absolute end-2.5 bottom-2.5" hidden={ !loading }>
                         <svg aria-hidden="true"
                              className="w-8 h-8 text-gray-200 animate-spin dark:text-gray-600 fill-blue-600"
@@ -96,6 +112,26 @@ export default function App() {
                     </div>
                 </div>
             </form>
+            <div className="flex flex-col-2 mb-2">
+                <div>
+                    <button type="button" disabled={ page === 1 || loading } onClick={ () => onPageChange(page - 1) }
+                            className="whitespace-nowrap text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800 disabled:cursor-not-allowed disabled:opacity-30">
+                        &larr; Prev 20
+                    </button>
+                </div>
+                <div className="w-full">
+                    <p className="whitespace-nowrap text-gray-500 font-medium text-sm px-5 py-2.5 me-2 mb-2">
+                        {(page - 1) * 20} - {recipes.length < 20 ? (page - 1) * 20 + recipes.length : page * 20}
+                    </p>
+
+                </div>
+                <div>
+                    <button type="button" disabled={recipes.length < 20 || loading} onClick={() => onPageChange(page + 1)}
+                            className="whitespace-nowrap text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800 disabled:cursor-not-allowed disabled:opacity-30">
+                    Next 20 &rarr;
+                    </button>
+                </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {recipes.map((recipe: Recipe) => (
                     <Card key={recipe.id} recipe={recipe}/>
