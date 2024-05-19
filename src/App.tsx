@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
-const base = "http://localhost:3000/recipe/read?"
+const base = "https://dinner-time-test.fly.dev/recipe/read?"
 const qParams = new URLSearchParams(location.search.slice(1))
 let timeOutId: number
 
